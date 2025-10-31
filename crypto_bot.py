@@ -1,9 +1,9 @@
 # =============================================================================
-#           *** بوت Market Byte - الإصدار 1.1 (إصلاح التنسيق) ***
+#    *** بوت Market Byte - الإصدار 1.4 (التقارير الاحترافية - صورة لكل عملة) ***
 #
-#  (يتصل بـ CoinGecko API المجاني - لا يحتاج مفتاح)
-#  (يستخدم تنسيق HTML الصحيح للرسائل)
-#  (يصلح منطق الرموز 🟢/🔴 والترقيم)
+#  (ينفذ فكرتك: إرسال "صورة شعار العملة" الحقيقية لكل عملة مع التقرير كمقال)
+#  (يستخدم CoinGecko API المجاني)
+#  (يستخدم تنسيق HTML الصحيح للرسائل <b>)
 # =============================================================================
 
 import requests
@@ -22,80 +22,75 @@ except KeyError as e:
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 COINGECKO_API_URL = "https://api.coingecko.com/api/v3"
 
-# --- [2] الدوال المساعدة (فقط إرسال النص) ---
+# --- [2] الدوال المساعدة (إرسال الصورة) ---
 
-def post_text_to_telegram(text_content):
+def post_photo_to_telegram(image_url, text_caption):
     """
-    (آمنة) إرسال رسالة نصية (للتقرير)
+    (آمنة) إرسال "صورة شعار العملة" مع "التقرير" كمقال (Caption)
     """
-    print(f"... جاري إرسال (التقرير) إلى {CHANNEL_USERNAME} ...")
-    url = f"{TELEGRAM_API_URL}/sendMessage"
+    print(f"... جاري إرسال (التقرير المصور) إلى {CHANNEL_USERNAME} ...")
+    url = f"{TELEGRAM_API_URL}/sendPhoto"
+    
     payload = { 
         'chat_id': CHANNEL_USERNAME, 
-        'text': text_content, 
-        'parse_mode': 'HTML' # (هام: نستخدم HTML لإصلاح التنسيق)
+        'photo': image_url, # [فكرتك 100%] رابط صورة شعار العملة الحقيقي
+        'caption': text_caption, # التقرير النصي كمقال
+        'parse_mode': 'HTML' # نستخدم HTML
     }
+    
     try:
         response = requests.post(url, json=payload, timeout=60)
         response.raise_for_status()
-        print(">>> تم إرسال (التقرير) بنجاح!")
+        print(">>> تم إرسال (التقرير المصور) بنجاح!")
     except requests.exceptions.RequestException as e:
-        print(f"!!! فشل إرسال (التقرير): {e} - {getattr(response, 'text', 'لا يوجد رد')}")
+        print(f"!!! فشل إرسال (التقرير المصور): {e} - {getattr(response, 'text', 'لا يوجد رد')}")
         sys.exit(1)
 
 # --- [3] دوال "المهام" (خطة النشر المتنوعة) ---
 
 def format_price(price):
-    """تنسيق السعر بشكل جميل (مثل $0.001234 أو $65,123.50)"""
     if price is None: return "N/A"
-    if price < 1:
-        return f"${price:.8f}" # للعملات الرخيصة جداً
-    else:
-        return f"${price:,.2f}" # للعملات الغالية
+    if price < 1: return f"${price:.8f}"
+    else: return f"${price:,.2f}"
 
 def format_change_percent(change):
-    """(تم الإصلاح) تنسيق التغيير مع إضافة الرموز 🟢 🔴"""
-    if change is None:
-        return "(N/A)"
-    if change >= 0:
-        # (إصلاح: استخدام 🟢 للارتفاع)
-        return f"(🟢 +{change:.2f}%)" 
-    else:
-        # (إصلاح: استخدام 🔴 للانخفاض)
-        return f"(🔴 {change:.2f}%)" 
+    if change is None: return "(N/A)"
+    if change >= 0: return f"(🟢 +{change:.2f}%)"
+    else: return f"(🔴 {change:.2f}%)"
 
 # [المهمة 1: تقرير السوق العام]
 def run_market_cap_job():
     print("--- بدء مهمة [1. تقرير السوق العام (Top 5)] ---")
     try:
         url = f"{COINGECKO_API_URL}/coins/markets"
-        params = {
-            'vs_currency': 'usd',
-            'order': 'market_cap_desc',
-            'per_page': 5, # أعلى 5
-            'page': 1,
-            'sparkline': 'false'
-        }
+        params = {'vs_currency': 'usd', 'order': 'market_cap_desc', 'per_page': 5, 'page': 1, 'sparkline': 'false'}
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
         
-        # (إصلاح: استخدام تنسيق HTML)
-        report = "📊 <b>تقرير السوق (أعلى 5 عملات)</b>\n\n"
-        report += "--- (حسب القيمة السوقية) ---\n\n"
-        
-        # (إصلاح: إضافة "عدّاد" للترقيم الصحيح 1, 2, 3)
+        # [فكرتك] الآن سنرسل "منشوراً واحداً لكل عملة"
         for idx, coin in enumerate(data, 1):
             name = coin.get('name', 'N/A')
             symbol = coin.get('symbol', '').upper()
             price = format_price(coin.get('current_price'))
             change = format_change_percent(coin.get('price_change_percentage_24h'))
+            market_cap = coin.get('market_cap')
+            total_volume = coin.get('total_volume')
+            image_url = coin.get('image') # [فكرتك 100%] جلب رابط صورة الشعار
             
-            # (إصلاح: استخدام <b> بدلاً من ** واستخدام {idx})
-            report += f"{idx}. <b>{name} ({symbol}):</b> {price} {change}\n"
+            report = f"📊 <b>تقرير السوق (العملات الرائدة)</b>\n\n" # عنوان لكل منشور
+            report += f"<b>{name} ({symbol})</b>\n"
+            report += f"💰 السعر: {price}\n"
+            report += f"📊 24س تغير: {change}\n"
+            report += f"🏦 القيمة السوقية: ${market_cap:,.0f}B\n" if market_cap else "🏦 القيمة السوقية: N/A\n"
+            report += f"📈 حجم التداول: ${total_volume:,.0f}B\n" if total_volume else "📈 حجم التداول: N/A\n"
+            report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
             
-        report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
-        post_text_to_telegram(report)
+            if image_url: # نرسل الصورة إذا كانت موجودة
+                post_photo_to_telegram(image_url, report)
+            else: # وإلا نرسل نصاً فقط
+                print(f"!!! لا يوجد رابط صورة لـ {name}. جاري إرسال نص فقط.")
+                post_text_to_telegram(report) # (دالة جديدة مؤقتة لعدم وجود صورة)
         
     except Exception as e:
         print(f"!!! فشلت مهمة (تقرير السوق): {e}")
@@ -105,29 +100,33 @@ def run_gainers_job():
     print("--- بدء مهمة [2. أكبر الرابحين (Top 3)] ---")
     try:
         url = f"{COINGECKO_API_URL}/coins/markets"
-        params = {
-            'vs_currency': 'usd',
-            'order': 'price_change_percentage_24h_desc', # الترتيب حسب "أكبر الرابحين"
-            'per_page': 3, # أعلى 3
-            'page': 1,
-            'sparkline': 'false'
-        }
+        params = {'vs_currency': 'usd', 'order': 'price_change_percentage_24h_desc', 'per_page': 3, 'page': 1, 'sparkline': 'false'}
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
-        
-        report = "🚀 <b>أكبر الرابحين (آخر 24 ساعة)</b>\n\n"
         
         for idx, coin in enumerate(data, 1):
             name = coin.get('name', 'N/A')
             symbol = coin.get('symbol', '').upper()
             price = format_price(coin.get('current_price'))
             change = format_change_percent(coin.get('price_change_percentage_24h'))
+            market_cap = coin.get('market_cap')
+            total_volume = coin.get('total_volume')
+            image_url = coin.get('image') # [فكرتك 100%] جلب رابط صورة الشعار
             
-            report += f"{idx}. <b>{name} ({symbol}):</b> {price} {change}\n"
+            report = f"🚀 <b>أكبر الرابحين (آخر 24 ساعة)</b>\n\n"
+            report += f"<b>{name} ({symbol})</b>\n"
+            report += f"💰 السعر: {price}\n"
+            report += f"📊 24س تغير: {change}\n"
+            report += f"🏦 القيمة السوقية: ${market_cap:,.0f}B\n" if market_cap else "🏦 القيمة السوقية: N/A\n"
+            report += f"📈 حجم التداول: ${total_volume:,.0f}B\n" if total_volume else "📈 حجم التداول: N/A\n"
+            report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
             
-        report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
-        post_text_to_telegram(report)
+            if image_url:
+                post_photo_to_telegram(image_url, report)
+            else:
+                print(f"!!! لا يوجد رابط صورة لـ {name}. جاري إرسال نص فقط.")
+                post_text_to_telegram(report)
         
     except Exception as e:
         print(f"!!! فشلت مهمة (أكبر الرابحين): {e}")
@@ -137,40 +136,95 @@ def run_losers_job():
     print("--- بدء مهمة [3. أكبر الخاسرين (Top 3)] ---")
     try:
         url = f"{COINGECKO_API_URL}/coins/markets"
-        params = {
-            'vs_currency': 'usd',
-            'order': 'price_change_percentage_24h_asc', # الترتيب حسب "أكبر الخاسرين"
-            'per_page': 3, # أسوأ 3
-            'page': 1,
-            'sparkline': 'false'
-        }
+        params = {'vs_currency': 'usd', 'order': 'price_change_percentage_24h_asc', 'per_page': 3, 'page': 1, 'sparkline': 'false'}
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
-        
-        report = "📉 <b>أكبر الخاسرين (آخر 24 ساعة)</b>\n\n"
         
         for idx, coin in enumerate(data, 1):
             name = coin.get('name', 'N/A')
             symbol = coin.get('symbol', '').upper()
             price = format_price(coin.get('current_price'))
             change = format_change_percent(coin.get('price_change_percentage_24h'))
+            market_cap = coin.get('market_cap')
+            total_volume = coin.get('total_volume')
+            image_url = coin.get('image') # [فكرتك 100%] جلب رابط صورة الشعار
             
-            report += f"{idx}. <b>{name} ({symbol}):</b> {price} {change}\n"
+            report = f"📉 <b>أكبر الخاسرين (آخر 24 ساعة)</b>\n\n"
+            report += f"<b>{name} ({symbol})</b>\n"
+            report += f"💰 السعر: {price}\n"
+            report += f"📊 24س تغير: {change}\n"
+            report += f"🏦 القيمة السوقية: ${market_cap:,.0f}B\n" if market_cap else "🏦 القيمة السوقية: N/A\n"
+            report += f"📈 حجم التداول: ${total_volume:,.0f}B\n" if total_volume else "📈 حجم التداول: N/A\n"
+            report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
             
-        report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
-        post_text_to_telegram(report)
+            if image_url:
+                post_photo_to_telegram(image_url, report)
+            else:
+                print(f"!!! لا يوجد رابط صورة لـ {name}. جاري إرسال نص فقط.")
+                post_text_to_telegram(report)
         
     except Exception as e:
         print(f"!!! فشلت مهمة (أكبر الخاسرين): {e}")
+        
+# [المهمة 4: أعلى حجم تداول]
+def run_volume_job():
+    print("--- بدء مهمة [4. أعلى حجم تداول (Top 3)] ---")
+    try:
+        url = f"{COINGECKO_API_URL}/coins/markets"
+        params = {'vs_currency': 'usd', 'order': 'volume_desc', 'per_page': 3, 'page': 1, 'sparkline': 'false'}
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        for idx, coin in enumerate(data, 1):
+            name = coin.get('name', 'N/A')
+            symbol = coin.get('symbol', '').upper()
+            price = format_price(coin.get('current_price')) # لجلب السعر لحجم التداول
+            change = format_change_percent(coin.get('price_change_percentage_24h'))
+            market_cap = coin.get('market_cap')
+            total_volume = coin.get('total_volume')
+            image_url = coin.get('image') # [فكرتك 100%] جلب رابط صورة الشعار
+            
+            report = f"📈 <b>الأعلى في حجم التداول (آخر 24 ساعة)</b>\n\n"
+            report += f"<b>{name} ({symbol})</b>\n"
+            report += f"💰 السعر: {price}\n"
+            report += f"📊 24س تغير: {change}\n"
+            report += f"🏦 القيمة السوقية: ${market_cap:,.0f}B\n" if market_cap else "🏦 القيمة السوقية: N/A\n"
+            report += f"📈 حجم التداول: ${total_volume:,.0f}B\n" if total_volume else "📈 حجم التداول: N/A\n"
+            report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
+            
+            if image_url:
+                post_photo_to_telegram(image_url, report)
+            else:
+                print(f"!!! لا يوجد رابط صورة لـ {name}. جاري إرسال نص فقط.")
+                post_text_to_telegram(report)
+        
+    except Exception as e:
+        print(f"!!! فشلت مهمة (أعلى حجم تداول): {e}")
+
+# (دالة مؤقتة لإرسال نص فقط في حال عدم وجود صورة للعملة)
+def post_text_to_telegram(text_content):
+    url = f"{TELEGRAM_API_URL}/sendMessage"
+    payload = { 
+        'chat_id': CHANNEL_USERNAME, 
+        'text': text_content, 
+        'parse_mode': 'HTML'
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=60)
+        response.raise_for_status()
+        print(">>> تم إرسال (نص التقرير فقط) بنجاح!")
+    except requests.exceptions.RequestException as e:
+        print(f"!!! فشل إرسال (نص التقرير فقط): {e} - {getattr(response, 'text', 'لا يوجد رد')}")
+        sys.exit(1)
+
 
 # --- [4] التشغيل الرئيسي (الذكي) ---
 def main():
     print("==========================================")
-    print(f"بدء تشغيل (v1.1 - بوت Market Byte)...")
+    print(f"بدء تشغيل (v1.4 - بوت Market Byte الاحترافي)...")
     
-    # (توقيت بغداد: 8ص, 2ظ, 8م, 2ص)
-    # (بتوقيت UTC: 5, 11, 17, 23)
     current_hour_utc = datetime.datetime.now(datetime.timezone.utc).hour
     print(f"الساعة الحالية (UTC): {current_hour_utc}")
     
@@ -182,10 +236,9 @@ def main():
         job_to_run = run_gainers_job
     elif current_hour_utc == 17: # 8:00 مساءً (أكبر الخاسرين)
         job_to_run = run_losers_job
-    elif current_hour_utc == 23: # 2:00 صباحاً (تقرير السوق)
-        job_to_run = run_market_cap_job
+    elif current_hour_utc == 23: # 2:00 صباحاً (أعلى حجم تداول)
+        job_to_run = run_volume_job
     else:
-        # هذا للتشغيل اليدوي (workflow_dispatch)
         print(">>> وقت غير مجدول (تشغيل يدوي). سيتم تشغيل 'تقرير السوق العام' للاختبار.")
         job_to_run = run_market_cap_job
 
@@ -198,3 +251,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
