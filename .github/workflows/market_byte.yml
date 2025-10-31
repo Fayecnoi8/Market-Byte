@@ -36,4 +36,3 @@ jobs:
         
       - name: Run Python Script
         run: python crypto_bot.py
-```eof
