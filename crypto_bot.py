@@ -1,7 +1,8 @@
 # =============================================================================
-#    *** بوت Market Byte - الإصدار 2.1 (التنبيهات الدورية) ***
+#    *** بوت Market Byte - الإصدار 2.3 (Pro Crypto API) ***
 #
-#  (يضيف فحص التنبيهات الدورية لقائمة المراقبة)
+#  (يستخدم COINGECKO_API_KEY وواجهة Pro API بدلاً من العامة)
+#  (يحافظ على جميع الميزات الأخرى من v2.2)
 # =============================================================================
 
 import requests
@@ -13,52 +14,57 @@ import datetime
 try:
     BOT_TOKEN = os.environ['BOT_TOKEN']
     CHANNEL_USERNAME = os.environ['CHANNEL_USERNAME'] # يجب أن يبدأ بـ @
+    
+    # (v2.2) مفتاح API الأخبار الاحترافي
+    NEWS_API_KEY = os.environ['NEWS_API_KEY'] 
+    
+    # (جديد v2.3) مفتاح API العملات الاحترافي
+    COINGECKO_API_KEY = os.environ['COINGECKO_API_KEY']
+
 except KeyError as e:
     print(f"!!! خطأ: متغير البيئة الأساسي غير موجود: {e}")
+    print("!!! هل تذكرت إضافة 'NEWS_API_KEY' و 'COINGECKO_API_KEY' إلى GitHub Secrets؟")
     sys.exit(1)
 
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-COINGECKO_API_URL = "https://api.coingecko.com/api/v3"
 
-# (جديد v2.0) رابط RSS للأخبار العاجلة
-NEWS_RSS_URL = "https://api.rss2json.com/v1/api.json?rss_url=https://cointelegraph.com/rss/tag/arabic"
+# (مطور v2.3) استخدام واجهة Pro API للعملات
+COINGECKO_API_URL = "https://pro-api.coingecko.com/api/v3"
 
-# --- (جديد v2.1) إعدادات التنبيهات الدورية ---
-# (قائمة العملات التي نريد مراقبتها باستمرار)
+# (v2.2) رابط API الأخبار الاحترافي
+NEWS_API_URL = (
+    "https://newsapi.org/v2/everything?"
+    "q=(عملات رقمية OR بيتكوين OR إيثريوم OR بلوكتشين)"
+    "&language=ar"
+    "&sortBy=publishedAt"
+    "&pageSize=3" 
+)
+
+# (v2.1) إعدادات التنبيهات الدورية
 ALERT_WATCHLIST = ['bitcoin', 'ethereum', 'solana', 'binancecoin']
-# (النسبة المئوية (لـ 24 ساعة) التي تطلق التنبيه)
 ALERT_THRESHOLD_PERCENT = 3.0 
 
 
 # --- [2] الدوال المساعدة (إرسال الرسائل) ---
-
+# (لا يوجد تغيير في هذه الدوال)
 def post_photo_to_telegram(image_url, text_caption):
-    """(آمنة) إرسال "صورة شعار العملة" مع "التقرير" كمقال (Caption)"""
     print(f"... جاري إرسال (التقرير المصور) إلى {CHANNEL_USERNAME} ...")
-    
     try:
-        # (الخطوة 1 - تحميل الصورة)
         print(f"   ... (1/2) جاري تحميل الصورة من: {image_url}")
         image_response = requests.get(image_url, timeout=30)
         image_response.raise_for_status()
         image_data = image_response.content
-        
-        # (الخطوة 2 - إعداد الرفع)
         url = f"{TELEGRAM_API_URL}/sendPhoto"
         payload = { 'chat_id': CHANNEL_USERNAME, 'caption': text_caption, 'parse_mode': 'HTML'}
         files = {'photo': ('coin.jpg', image_data, 'image/jpeg')}
-        
-        # (الخطوة 3 - الإرسال)
         print("   ... (2/2) جاري رفع الصورة إلى تيليجرام ...")
         response = requests.post(url, data=payload, files=files, timeout=60)
         response.raise_for_status()
         print(">>> تم إرسال (التقرير المصور) بنجاح!")
-        
     except requests.exceptions.RequestException as e:
         print(f"!!! فشل إرسال (التقرير المصور): {getattr(response, 'text', 'لا يوجد رد')}")
 
 def post_text_to_telegram(text_content):
-    """(أساسية) إرسال "رسالة نصية فقط" (للأخبار أو التنبيهات)"""
     url = f"{TELEGRAM_API_URL}/sendMessage"
     payload = { 
         'chat_id': CHANNEL_USERNAME, 
@@ -75,7 +81,7 @@ def post_text_to_telegram(text_content):
 
 
 # --- [3] دوال تنسيق التقرير (Helpers) ---
-
+# (لا يوجد تغيير في هذه الدوال)
 def format_price(price):
     if price is None: return "N/A"
     if price < 1: return f"${price:.8f}"
@@ -84,7 +90,6 @@ def format_price(price):
 def format_change_percent(change, timeframe="24h"):
     icon = "📊" 
     if timeframe == "7d": icon = "🗓️"
-
     if change is None: return "(N/A)"
     if change >= 0: return f"({icon} 🟢 +{change:.2f}%)"
     else: return f"({icon} 🔴 {change:.2f}%)"
@@ -95,14 +100,10 @@ def format_large_number(num):
     elif num >= 1_000_000: return f"${(num / 1_000_000):.2f}M"
     else: return f"${num:,.0f}"
 
-# --- [4] دوال "المهام" (خطة النشر المتنوعة) ---
+# --- [4] دوال "المهام" (محدثة لـ v2.3) ---
 
-# [المهمة 0: فحص التنبيهات (جديد v2.1)]
+# [المهمة 0: فحص التنبيهات (v2.1)]
 def run_price_alert_job():
-    """
-    (جديد v2.1) تتحقق من قائمة المراقبة.
-    ترسل تنبيهاً نصياً إذا تجاوز التغير (24س) الحد المسموح.
-    """
     print("--- بدء مهمة [A. فحص التنبيهات الدورية] ---")
     try:
         ids = ",".join(ALERT_WATCHLIST)
@@ -110,7 +111,8 @@ def run_price_alert_job():
         params = {
             'ids': ids,
             'vs_currencies': 'usd',
-            'include_24hr_change': 'true'
+            'include_24hr_change': 'true',
+            'x_cg_pro_api_key': COINGECKO_API_KEY # (مفتاح Pro v2.3)
         }
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
@@ -120,23 +122,18 @@ def run_price_alert_job():
         for coin_id, info in data.items():
             change = info.get('usd_24h_change', 0)
             price = info.get('usd', 0)
-            
             if change is None: continue
             
-            # التحقق إذا كان التغير (سواء موجب أو سالب) أكبر من الحد
             if abs(change) >= ALERT_THRESHOLD_PERCENT:
                 print(f"!!! تنبيه: {coin_id} تغير بنسبة {change}%. جاري إرسال التنبيه.")
                 icon = "🚨"
                 direction_icon = "🟢" if change > 0 else "🔴"
-                price_formatted = format_price(price) # استخدام دالة التنسيق
-                
-                # (رسالة نصية فقط حسب طلبك)
+                price_formatted = format_price(price)
                 alert_text = f"{icon} <b>تنبيه حركة سعرية</b> {icon}\n\n"
                 alert_text += f"<b>{coin_id.capitalize()} ({coin_id.upper()})</b>\n"
                 alert_text += f"💰 السعر الحالي: {price_formatted}\n"
                 alert_text += f"📊 التغير (24س): {direction_icon} {change:.2f}%\n"
                 alert_text += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
-                
                 post_text_to_telegram(alert_text)
                 alerts_sent += 1
                 
@@ -145,15 +142,20 @@ def run_price_alert_job():
             
     except Exception as e:
         print(f"!!! فشلت مهمة (فحص التنبيهات): {e}")
-        # (نحن لا نوقف التشغيل هنا، فقط نطبع الخطأ ونكمل)
-
 
 # [المهمة 1: تقرير السوق العام]
 def run_market_cap_job():
     print("--- بدء مهمة [1. تقرير السوق العام (Top 5)] ---")
     try:
         url = f"{COINGECKO_API_URL}/coins/markets"
-        params = {'vs_currency': 'usd', 'order': 'market_cap_desc', 'per_page': 5, 'page': 1, 'sparkline': 'false'}
+        params = {
+            'vs_currency': 'usd', 
+            'order': 'market_cap_desc', 
+            'per_page': 5, 
+            'page': 1, 
+            'sparkline': 'false',
+            'x_cg_pro_api_key': COINGECKO_API_KEY # (مفتاح Pro v2.3)
+        }
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
@@ -166,7 +168,6 @@ def run_market_cap_job():
             market_cap = format_large_number(coin.get('market_cap'))
             total_volume = format_large_number(coin.get('total_volume'))
             image_url = coin.get('image')
-            
             report = f"📊 <b>تقرير السوق (العملات الرائدة)</b>\n\n"
             report += f"<b>{name} ({symbol})</b>\n"
             report += f"💰 السعر: {price}\n"
@@ -188,7 +189,9 @@ def run_gainers_job():
     print("--- بدء مهمة [2. أكبر الرابحين (Top 3 Daily)] ---")
     try:
         url = f"{COINGECKO_API_URL}/search/trending"
-        response = requests.get(url, timeout=30)
+        # (مطور v2.3) إضافة المفتاح لطلبات الترند
+        params = {'x_cg_pro_api_key': COINGECKO_API_KEY} 
+        response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json().get('coins', [])
         
@@ -207,7 +210,6 @@ def run_gainers_job():
             market_cap = format_large_number(coin.get('data', {}).get('market_cap_usd'))
             total_volume = format_large_number(coin.get('data', {}).get('total_volume_usd'))
             image_url = coin.get('large') 
-            
             report = f"🚀 <b>الأكثر رواجاً ورابحاً (آخر 24 ساعة)</b>\n\n"
             report += f"<b>{name} ({symbol})</b>\n"
             report += f"💰 السعر: {price}\n"
@@ -229,7 +231,14 @@ def run_losers_job():
     print("--- بدء مهمة [3. أكبر الخاسرين (Top 3 Daily)] ---")
     try:
         url = f"{COINGECKO_API_URL}/coins/markets"
-        params = {'vs_currency': 'usd', 'order': 'price_change_percentage_24h_asc', 'per_page': 3, 'page': 1, 'sparkline': 'false'}
+        params = {
+            'vs_currency': 'usd', 
+            'order': 'price_change_percentage_24h_asc', 
+            'per_page': 3, 
+            'page': 1, 
+            'sparkline': 'false',
+            'x_cg_pro_api_key': COINGECKO_API_KEY # (مفتاح Pro v2.3)
+        }
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
@@ -242,7 +251,6 @@ def run_losers_job():
             market_cap = format_large_number(coin.get('market_cap'))
             total_volume = format_large_number(coin.get('total_volume'))
             image_url = coin.get('image')
-            
             report = f"📉 <b>أكبر الخاسرين (آخر 24 ساعة)</b>\n\n"
             report += f"<b>{name} ({symbol})</b>\n"
             report += f"💰 السعر: {price}\n"
@@ -259,28 +267,28 @@ def run_losers_job():
     except Exception as e:
         print(f"!!! فشلت مهمة (أكبر الخاسرين): {e}")
         
-# [المهمة 4: الأخبار العاجلة]
+# [المهمة 4: الأخبار العاجلة (v2.2)]
 def run_news_job():
-    print("--- بدء مهمة [4. الأخبار العاجلة (Top 3 News)] ---")
+    print("--- بدء مهمة [4. الأخبار العاجلة (NewsAPI.org)] ---")
     try:
-        response = requests.get(NEWS_RSS_URL, timeout=30)
+        full_url = f"{NEWS_API_URL}&apiKey={NEWS_API_KEY}"
+        response = requests.get(full_url, timeout=30)
         response.raise_for_status()
         data = response.json()
         
-        items = data.get('items', [])
-        if not items:
-            print("... لا توجد أخبار جديدة.")
+        articles = data.get('articles', [])
+        if not articles:
+            print("... لا توجد أخبار جديدة (NewsAPI).")
             return
 
         report = "📰 <b>أخبار عاجلة من السوق</b>\n\n"
-        
-        for item in items[:3]: 
-            title = item.get('title', 'لا يوجد عنوان')
-            link = item.get('link', '#')
-            
+        for article in articles:
+            title = article.get('title', 'لا يوجد عنوان')
+            link = article.get('url', '#')
+            source_name = article.get('source', {}).get('name', 'المصدر')
             report += f"⚡️ <b>{title}</b>\n"
+            report += f"(المصدر: {source_name})\n"
             report += f"<a href='{link}'>اقرأ المزيد...</a>\n\n"
-        
         report += f"---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
         
         post_text_to_telegram(report)
@@ -296,18 +304,17 @@ def run_weekly_summary_job():
         params = {
             'vs_currency': 'usd', 'order': 'market_cap_desc', 
             'per_page': 100, 'page': 1, 'sparkline': 'false',
-            'price_change_percentage': '7d' # طلب تغير 7 أيام
+            'price_change_percentage': '7d',
+            'x_cg_pro_api_key': COINGECKO_API_KEY # (مفتاح Pro v2.3)
         }
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
         
         valid_data = [c for c in data if c.get('price_change_percentage_7d_in_currency') is not None]
-        
         gainers = sorted(valid_data, key=lambda x: x['price_change_percentage_7d_in_currency'], reverse=True)[:3]
         losers = sorted(valid_data, key=lambda x: x['price_change_percentage_7d_in_currency'])[:3]
         
-        # (إرسال الرابحين)
         for coin in gainers:
             report = f"🏆 <b>ملخص الأسبوع: أكبر الرابحين</b>\n\n"
             report += f"<b>{coin.get('name', 'N/A')} ({coin.get('symbol', '').upper()})</b>\n"
@@ -317,7 +324,6 @@ def run_weekly_summary_job():
             report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
             post_photo_to_telegram(coin.get('image'), report)
 
-        # (إرسال الخاسرين)
         for coin in losers:
             report = f"📉 <b>ملخص الأسبوع: أكبر الخاسرين</b>\n\n"
             report += f"<b>{coin.get('name', 'N/A')} ({coin.get('symbol', '').upper()})</b>\n"
@@ -331,10 +337,10 @@ def run_weekly_summary_job():
         print(f"!!! فشلت مهمة (الملخص الأسبوعي): {e}")
 
 
-# --- [5] التشغيل الرئيسي (الذكي v2.1) ---
+# --- [5] التشغيل الرئيسي (الذكي v2.3) ---
 def main():
     print("==========================================")
-    print(f"بدء تشغيل (v2.1 - بوت Market Byte - مع التنبيهات)...")
+    print(f"بدء تشغيل (v2.3 - بوت Market Byte - Pro API)...")
     
     today_utc = datetime.datetime.now(datetime.timezone.utc)
     current_hour_utc = today_utc.hour
@@ -342,8 +348,7 @@ def main():
     
     print(f"الوقت الحالي (UTC): الساعة {current_hour_utc}, اليوم {current_day_utc}")
     
-    # --- (جديد v2.1) الخطوة 1: تشغيل فحص التنبيهات دائماً ---
-    # (سيتم تشغيله كل 6 ساعات، في كل مرة يعمل فيها البوت)
+    # --- الخطوة 1: تشغيل فحص التنبيهات دائماً ---
     try:
         run_price_alert_job()
     except Exception as e:
@@ -376,7 +381,6 @@ def main():
         job_to_run = run_news_job
         
     else:
-        # (للتشغيل اليدوي أو الاختبار)
         print(f">>> (تشغيل يدوي/اختبار في الساعة {current_hour_utc}) سيتم تشغيل [تقرير السوق العام] (بعد التنبيهات)")
         job_to_run = run_market_cap_job
 
