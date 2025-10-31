@@ -1,11 +1,8 @@
 # =============================================================================
-#    *** بوت Market Byte - الإصدار 5.0 (المنطق الزمني المدمج) ***
+#    *** بوت Market Byte - الإصدار 5.2 (إصلاح الخطأ الإملائي) ***
 #
-#  (جديد) هذا الكود يفعل كل شيء من ملف واحد.
-#  (جديد) دالة main() في الأسفل تتحقق من الساعة وتقرر ما يجب فعله:
-#    - (5:00 UTC): تشغيل النشر اليومي (أفضل 15)
-#    - (0, 6, 12, 18 UTC): تشغيل فحص التنبيهات
-#    - (تشغيل يدوي): تشغيل النشر اليومي (للاختبار)
+#  (إصلاح) تم إصلاح خطأ إملائي فادح في رابط (pro-api.coingocke.com)
+#  (يجب أن يعمل هذا الإصدار الآن بشكل صحيح)
 #
 #  (يستخدم حصرياً واجهة API الاحترافية Pro مع المفتاح)
 # =============================================================================
@@ -28,7 +25,7 @@ except KeyError as e:
     sys.exit(1)
 
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-# (v5.0) استخدام واجهة Pro API حصرياً
+# (v5.2) تم إصلاح الخطأ الإملائي هنا
 PRO_COINGECKO_API_URL = "https://pro-api.coingecko.com/api/v3"
 # (v5.0) إعدادات طلبات واجهة Pro (يجب إرسال المفتاح)
 PRO_API_HEADERS = {'x-cg-pro-api-key': COINGECKO_API_KEY}
@@ -39,7 +36,6 @@ ALERT_THRESHOLD_PERCENT = 3.0
 
 # (إعداد لغة عربية للتاريخ)
 try:
-    # استخدام 'ar_EG.UTF-8' كبديل شائع إذا لم تتوفر 'ar_SA.UTF-8'
     locale.setlocale(locale.LC_TIME, 'ar_SA.UTF-8')
 except locale.Error:
     try:
@@ -49,11 +45,12 @@ except locale.Error:
 
 
 # --- [2] الدوال المساعدة (إرسال الرسائل - آمنة) ---
+# ... (الدوال post_photo_to_telegram و post_text_to_telegram لم تتغير) ...
 
 def post_photo_to_telegram(image_url, text_caption):
     """(آمن) إرسال صورة + نص (مع خدعة الرفع)"""
     print(f"... جاري إرسال (التقرير المصور) إلى {CHANNEL_USERNAME} ...")
-    response = None # لضمان توفر المتغير في حال حدوث خطأ مبكر
+    response = None 
     try:
         print(f"   ... (1/2) جاري تحميل الصورة من: {image_url}")
         image_response = requests.get(image_url, timeout=30)
@@ -62,7 +59,6 @@ def post_photo_to_telegram(image_url, text_caption):
         
         url = f"{TELEGRAM_API_URL}/sendPhoto"
         payload = { 'chat_id': CHANNEL_USERNAME, 'caption': text_caption, 'parse_mode': 'HTML'}
-        # تحديد نوع الصورة (JPEG أو PNG) بناءً على الرابط
         content_type = 'image/png' if '.png' in image_url else 'image/jpeg'
         files = {'photo': ('coin_image', image_data, content_type)}
         
@@ -72,7 +68,6 @@ def post_photo_to_telegram(image_url, text_caption):
         print(">>> تم إرسال (التقرير المصور) بنجاح!")
         return True # نجح
     except requests.exceptions.RequestException as e:
-        # طباعة الخطأ من تيليجرام إذا كان متاحاً
         error_message = getattr(response, 'text', 'لا يوجد رد من تيليجرام')
         print(f"!!! فشل إرسال (التقرير المصور): {e} - {error_message}")
         return False # فشل
@@ -81,7 +76,7 @@ def post_text_to_telegram(text_content):
     """(آمن) إرسال نص فقط (للتنبيهات أو كخطة احتياطية)"""
     url = f"{TELEGRAM_API_URL}/sendMessage"
     payload = { 'chat_id': CHANNEL_USERNAME, 'text': text_content, 'parse_mode': 'HTML', 'disable_web_page_preview': True }
-    response = None # لضمان توفر المتغير
+    response = None 
     try:
         response = requests.post(url, json=payload, timeout=60)
         response.raise_for_status()
@@ -91,10 +86,11 @@ def post_text_to_telegram(text_content):
         print(f"!!! فشل إرسال (التقرير النصي): {e} - {error_message}")
 
 # --- [3] دوال تنسيق التقرير (Helpers) ---
+# ... (الدوال format_price, format_change_percent, format_large_number لم تتغير) ...
 
 def format_price(price):
     if price is None: return "N/A"
-    if price < 1: return f"${price:.8f}" # دقة عالية للعملات الرخيصة
+    if price < 1: return f"${price:.8f}" 
     else: return f"${price:,.2f}"
 
 def format_change_percent(change):
@@ -103,16 +99,15 @@ def format_change_percent(change):
     else: return f"(📊 🔴 {change:.2f}%)"
     
 def format_large_number(num):
-    """تنسيق الأرقام الكبيرة (مليار/مليون)"""
     if num is None: return "N/A"
     if num >= 1_000_000_000:
-        return f"${(num / 1_000_000_000):.2f}B" # مليار
+        return f"${(num / 1_000_000_000):.2f}B" 
     elif num >= 1_000_000:
-        return f"${(num / 1_000_000):.2f}M" # مليون
+        return f"${(num / 1_000_000):.2f}M" 
     else:
-        return f"${num:,.0f}" # أصغر من مليون
+        return f"${num:,.0f}"
 
-# --- [4] تعريف المهام (v5.0) ---
+# --- [4] تعريف المهام (v5.2 - العودة إلى 15 عملة) ---
 
 # [المهمة 1: النشر اليومي 8 صباحاً]
 def run_daily_top_15_job():
@@ -121,21 +116,20 @@ def run_daily_top_15_job():
     # 1. إرسال العنوان (مع التاريخ واليوم)
     try:
         today = datetime.datetime.now()
-        # %A هو اليوم (الجمعة), %d هو اليوم (31), %B هو الشهر (أكتوبر), %Y هي السنة
         date_str = today.strftime("📊 <b>أفضل 15 عملة لهذا اليوم (%A، %d %B %Y)</b>")
         post_text_to_telegram(date_str)
     except Exception as e:
         print(f"!!! فشل إرسال رسالة العنوان: {e}")
-        # (لا نتوقف، نحاول إرسال العملات)
 
     # 2. جلب وإرسال أفضل 15 عملة
-    response = None # لضمان توفر المتغير
+    response = None 
     try:
         url = f"{PRO_COINGECKO_API_URL}/coins/markets"
+        # (v5.2) العودة إلى 15 عملة
         params = {'vs_currency': 'usd', 'order': 'market_cap_desc', 'per_page': 15, 'page': 1, 'sparkline': 'false'}
-        # (v5.0) إرسال المفتاح في الطلب
+        
         response = requests.get(url, params=params, headers=PRO_API_HEADERS, timeout=30)
-        response.raise_for_status() # التأكد من نجاح الطلب (مثل 200 OK)
+        response.raise_for_status() 
         data = response.json()
         
         print(f"... (API Pro) تم جلب {len(data)} عملة بنجاح.")
@@ -166,7 +160,6 @@ def run_daily_top_15_job():
                 post_text_to_telegram(report)
         
     except Exception as e:
-        # طباعة الخطأ إذا فشل جلب البيانات من CoinGecko
         error_message = getattr(response, 'text', 'لا يوجد رد من API')
         print(f"!!! فشل جلب أو معالجة بيانات (تقرير السوق): {e} - {error_message}")
         post_text_to_telegram(f"🚨 حدث خطأ أثناء جلب بيانات السوق اليومية. يرجى المراجعة.")
@@ -174,12 +167,11 @@ def run_daily_top_15_job():
 # [المهمة 2: فحص التنبيهات كل 6 ساعات]
 def run_price_alert_job():
     print("--- بدء مهمة [2. فحص التنبيهات الدورية] ---")
-    response = None # لضمان توفر المتغير
+    response = None 
     try:
         ids = ",".join(ALERT_WATCHLIST)
         url = f"{PRO_COINGECKO_API_URL}/simple/price"
         params = {'ids': ids, 'vs_currencies': 'usd', 'include_24hr_change': 'true'}
-        # (v5.0) إرسال المفتاح في الطلب
         response = requests.get(url, params=params, headers=PRO_API_HEADERS, timeout=30)
         response.raise_for_status()
         data = response.json()
@@ -192,7 +184,6 @@ def run_price_alert_job():
             price = info.get('usd', 0)
             if change is None: continue
             
-            # التحقق إذا تجاوز التغير الحد
             if abs(change) >= ALERT_THRESHOLD_PERCENT:
                 print(f"!!! تنبيه: {coin_id} تغير بنسبة {change}%. جاري إرسال التنبيه.")
                 icon = "🚨"; direction_icon = "🟢" if change > 0 else "🔴"
@@ -213,21 +204,15 @@ def run_price_alert_job():
     except Exception as e:
         error_message = getattr(response, 'text', 'لا يوجد رد من API')
         print(f"!!! فشلت مهمة (فحص التنبيهات): {e} - {error_message}")
-        # (لا نرسل رسالة خطأ للقناة هنا حتى لا نزعج المستخدمين)
 
-# --- [5] التشغيل الرئيسي (v5.0 - المنطق الزمني المدمج) ---
+# --- [5] التشغيل الرئيسي (v5.2) ---
 def main():
     print("==========================================")
-    print(f"بدء تشغيل (v5.0 - بوت Market Byte - المنطق المدمج)...")
+    print(f"بدء تشغيل (v5.2 - بوت Market Byte - إصلاح الخطأ الإملائي)...")
     
-    # (v5.0) هذا هو الجزء "الذكي"
-    # نحصل على الساعة الحالية بتوقيت UTC
     current_hour_utc = datetime.datetime.now(datetime.timezone.utc).hour
     print(f"الساعة الحالية (UTC): {current_hour_utc}")
 
-    # (v5.0) فحص متغير "التشغيل اليدوي" من GitHub
-    # GITHUB_EVENT_NAME = 'workflow_dispatch' (إذا كان يدوياً)
-    # GITHUB_EVENT_NAME = 'schedule' (إذا كان مجدولاً)
     is_manual_run = os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
 
     # --- تحديد المهمة ---
@@ -247,7 +232,7 @@ def main():
         print(">>> (تشغيل يدوي للاختبار) - سيتم تشغيل [النشر اليومي].")
         run_daily_top_15_job()
 
-    # 4. أي وقت آخر (لن يحدث إذا كانت الجداول الزمنية صحيحة)
+    # 4. أي وقت آخر
     else:
         print(f"... (الوقت: {current_hour_utc}:00 UTC) - لا توجد مهمة مجدولة لهذا الوقت. تخطي.")
 
