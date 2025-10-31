@@ -1,10 +1,9 @@
 # =============================================================================
-#    *** بوت Market Byte - الإصدار 5.2 (إصلاح الخطأ الإملائي) ***
+#    *** بوت Market Byte - الإصدار 6.0 (إصلاح Demo Key) ***
 #
-#  (إصلاح) تم إصلاح خطأ إملائي فادح في رابط (pro-api.coingocke.com)
-#  (يجب أن يعمل هذا الإصدار الآن بشكل صحيح)
-#
-#  (يستخدم حصرياً واجهة API الاحترافية Pro مع المفتاح)
+#  (جديد) تم اكتشاف المشكلة بفضل ملف HTML الخاص بالمستخدم!
+#  المفتاح ليس (Pro) بل (Demo)، ويجب إرساله كرابط (parameter)
+#  وليس كـ (header)، ويستخدم الرابط العام (api) وليس (pro-api).
 # =============================================================================
 
 import requests
@@ -17,7 +16,7 @@ import locale
 try:
     BOT_TOKEN = os.environ['BOT_TOKEN']
     CHANNEL_USERNAME = os.environ['CHANNEL_USERNAME'] # يجب أن يبدأ بـ @
-    COINGECKO_API_KEY = os.environ['COINGECKO_API_KEY'] # (مطلوب لواجهة Pro)
+    COINGECKO_API_KEY = os.environ['COINGECKO_API_KEY'] # (v6.0) هذا هو مفتاح "Demo"
     
 except KeyError as e:
     print(f"!!! خطأ: متغير البيئة الأساسي غير موجود: {e}")
@@ -25,10 +24,12 @@ except KeyError as e:
     sys.exit(1)
 
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-# (v5.2) تم إصلاح الخطأ الإملائي هنا
-PRO_COINGECKO_API_URL = "https://pro-api.coingecko.com/api/v3"
-# (v5.0) إعدادات طلبات واجهة Pro (يجب إرسال المفتاح)
-PRO_API_HEADERS = {'x-cg-pro-api-key': COINGECKO_API_KEY}
+# (v6.0) العودة إلى الرابط العام (كما في ملف HTML)
+COINGECKO_API_URL = "https://api.coingecko.com/api/v3"
+
+# (v6.0) هذا هو اسم المفتاح الذي سيتم إرساله في الرابط
+# (مستخرج من ملف HTML: x_cg_demo_api_key)
+API_KEY_PARAM_NAME = 'x_cg_demo_api_key'
 
 # (إعدادات مهمة التنبيهات)
 ALERT_WATCHLIST = ['bitcoin', 'ethereum', 'solana']
@@ -107,7 +108,7 @@ def format_large_number(num):
     else:
         return f"${num:,.0f}"
 
-# --- [4] تعريف المهام (v5.2 - العودة إلى 15 عملة) ---
+# --- [4] تعريف المهام (v6.0 - إصلاح Demo Key) ---
 
 # [المهمة 1: النشر اليومي 8 صباحاً]
 def run_daily_top_15_job():
@@ -124,15 +125,23 @@ def run_daily_top_15_job():
     # 2. جلب وإرسال أفضل 15 عملة
     response = None 
     try:
-        url = f"{PRO_COINGECKO_API_URL}/coins/markets"
-        # (v5.2) العودة إلى 15 عملة
-        params = {'vs_currency': 'usd', 'order': 'market_cap_desc', 'per_page': 15, 'page': 1, 'sparkline': 'false'}
+        url = f"{COINGECKO_API_URL}/coins/markets"
+        # (v6.0) هذا هو الإصلاح الأهم! إضافة المفتاح كـ "param"
+        params = {
+            'vs_currency': 'usd', 
+            'order': 'market_cap_desc', 
+            'per_page': 15, 
+            'page': 1, 
+            'sparkline': 'false',
+            API_KEY_PARAM_NAME: COINGECKO_API_KEY # (v6.0) الإصلاح هنا
+        }
         
-        response = requests.get(url, params=params, headers=PRO_API_HEADERS, timeout=30)
+        # (v6.0) لا نحتاج "headers" بعد الآن
+        response = requests.get(url, params=params, timeout=30)
         response.raise_for_status() 
         data = response.json()
         
-        print(f"... (API Pro) تم جلب {len(data)} عملة بنجاح.")
+        print(f"... (API Demo) تم جلب {len(data)} عملة بنجاح.")
         
         for idx, coin in enumerate(data, 1):
             name = coin.get('name', 'N/A')
@@ -170,13 +179,21 @@ def run_price_alert_job():
     response = None 
     try:
         ids = ",".join(ALERT_WATCHLIST)
-        url = f"{PRO_COINGECKO_API_URL}/simple/price"
-        params = {'ids': ids, 'vs_currencies': 'usd', 'include_24hr_change': 'true'}
-        response = requests.get(url, params=params, headers=PRO_API_HEADERS, timeout=30)
+        url = f"{COINGECKO_API_URL}/simple/price"
+        # (v6.0) الإصلاح الثاني هنا! إضافة المفتاح كـ "param"
+        params = {
+            'ids': ids, 
+            'vs_currencies': 'usd', 
+            'include_24hr_change': 'true',
+            API_KEY_PARAM_NAME: COINGECKO_API_KEY # (v6.0) الإصلاح هنا
+        }
+        
+        # (v6.0) لا نحتاج "headers"
+        response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
         
-        print(f"... (API Pro) تم جلب بيانات التنبيهات لـ {len(data)} عملة.")
+        print(f"... (API Demo) تم جلب بيانات التنبيهات لـ {len(data)} عملة.")
         
         alerts_sent = 0
         for coin_id, info in data.items():
@@ -205,10 +222,12 @@ def run_price_alert_job():
         error_message = getattr(response, 'text', 'لا يوجد رد من API')
         print(f"!!! فشلت مهمة (فحص التنبيهات): {e} - {error_message}")
 
-# --- [5] التشغيل الرئيسي (v5.2) ---
+# --- [5] التشغيل الرئيسي (v6.0) ---
+# ... (دالة main() لم تتغير عن v5.2، فهي ذكية وصحيحة) ...
+
 def main():
     print("==========================================")
-    print(f"بدء تشغيل (v5.2 - بوت Market Byte - إصلاح الخطأ الإملائي)...")
+    print(f"بدء تشغيل (v6.0 - بوت Market Byte - إصلاح Demo Key)...")
     
     current_hour_utc = datetime.datetime.now(datetime.timezone.utc).hour
     print(f"الساعة الحالية (UTC): {current_hour_utc}")
