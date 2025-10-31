@@ -1,3 +1,11 @@
+# =============================================================================
+#           *** بوت Market Byte - الإصدار 1.1 (إصلاح التنسيق) ***
+#
+#  (يتصل بـ CoinGecko API المجاني - لا يحتاج مفتاح)
+#  (يستخدم تنسيق HTML الصحيح للرسائل)
+#  (يصلح منطق الرموز 🟢/🔴 والترقيم)
+# =============================================================================
+
 import requests
 import os
 import sys
@@ -12,7 +20,6 @@ except KeyError as e:
     sys.exit(1)
 
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-# (نستخدم CoinGecko API المجاني 100% - لا يحتاج مفتاح)
 COINGECKO_API_URL = "https://api.coingecko.com/api/v3"
 
 # --- [2] الدوال المساعدة (فقط إرسال النص) ---
@@ -26,7 +33,7 @@ def post_text_to_telegram(text_content):
     payload = { 
         'chat_id': CHANNEL_USERNAME, 
         'text': text_content, 
-        'parse_mode': 'HTML' # سنستخدم HTML هنا لتمييز الألوان
+        'parse_mode': 'HTML' # (هام: نستخدم HTML لإصلاح التنسيق)
     }
     try:
         response = requests.post(url, json=payload, timeout=60)
@@ -34,25 +41,28 @@ def post_text_to_telegram(text_content):
         print(">>> تم إرسال (التقرير) بنجاح!")
     except requests.exceptions.RequestException as e:
         print(f"!!! فشل إرسال (التقرير): {e} - {getattr(response, 'text', 'لا يوجد رد')}")
-        sys.exit(1) # إيقاف التشغيل بفشل إذا لم نتمكن من الإرسال
+        sys.exit(1)
 
 # --- [3] دوال "المهام" (خطة النشر المتنوعة) ---
 
 def format_price(price):
     """تنسيق السعر بشكل جميل (مثل $0.001234 أو $65,123.50)"""
+    if price is None: return "N/A"
     if price < 1:
         return f"${price:.8f}" # للعملات الرخيصة جداً
     else:
         return f"${price:,.2f}" # للعملات الغالية
 
 def format_change_percent(change):
-    """تنسيق التغيير مع إضافة الرموز 🟢 🔴"""
+    """(تم الإصلاح) تنسيق التغيير مع إضافة الرموز 🟢 🔴"""
     if change is None:
         return "(N/A)"
     if change >= 0:
-        return f"(🟢 +{change:.2f}%)"
+        # (إصلاح: استخدام 🟢 للارتفاع)
+        return f"(🟢 +{change:.2f}%)" 
     else:
-        return f"(🔴 {change:.2f}%)"
+        # (إصلاح: استخدام 🔴 للانخفاض)
+        return f"(🔴 {change:.2f}%)" 
 
 # [المهمة 1: تقرير السوق العام]
 def run_market_cap_job():
@@ -70,18 +80,21 @@ def run_market_cap_job():
         response.raise_for_status()
         data = response.json()
         
-        report = "📊 **تقرير السوق (أعلى 5 عملات)**\n\n"
+        # (إصلاح: استخدام تنسيق HTML)
+        report = "📊 <b>تقرير السوق (أعلى 5 عملات)</b>\n\n"
         report += "--- (حسب القيمة السوقية) ---\n\n"
         
-        for coin in data:
+        # (إصلاح: إضافة "عدّاد" للترقيم الصحيح 1, 2, 3)
+        for idx, coin in enumerate(data, 1):
             name = coin.get('name', 'N/A')
             symbol = coin.get('symbol', '').upper()
-            price = format_price(coin.get('current_price', 0))
+            price = format_price(coin.get('current_price'))
             change = format_change_percent(coin.get('price_change_percentage_24h'))
             
-            report += f"1. **{name} ({symbol}):** {price} {change}\n"
+            # (إصلاح: استخدام <b> بدلاً من ** واستخدام {idx})
+            report += f"{idx}. <b>{name} ({symbol}):</b> {price} {change}\n"
             
-        report += f"\n---\n*تابعنا للمزيد من {CHANNEL_USERNAME}*"
+        report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
         post_text_to_telegram(report)
         
     except Exception as e:
@@ -103,17 +116,17 @@ def run_gainers_job():
         response.raise_for_status()
         data = response.json()
         
-        report = "🚀 **أكبر الرابحين (آخر 24 ساعة)**\n\n"
+        report = "🚀 <b>أكبر الرابحين (آخر 24 ساعة)</b>\n\n"
         
-        for coin in data:
+        for idx, coin in enumerate(data, 1):
             name = coin.get('name', 'N/A')
             symbol = coin.get('symbol', '').upper()
-            price = format_price(coin.get('current_price', 0))
+            price = format_price(coin.get('current_price'))
             change = format_change_percent(coin.get('price_change_percentage_24h'))
             
-            report += f"1. **{name} ({symbol}):** {price} {change}\n"
+            report += f"{idx}. <b>{name} ({symbol}):</b> {price} {change}\n"
             
-        report += f"\n---\n*تابعنا للمزيد من {CHANNEL_USERNAME}*"
+        report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
         post_text_to_telegram(report)
         
     except Exception as e:
@@ -135,17 +148,17 @@ def run_losers_job():
         response.raise_for_status()
         data = response.json()
         
-        report = "📉 **أكبر الخاسرين (آخر 24 ساعة)**\n\n"
+        report = "📉 <b>أكبر الخاسرين (آخر 24 ساعة)</b>\n\n"
         
-        for coin in data:
+        for idx, coin in enumerate(data, 1):
             name = coin.get('name', 'N/A')
             symbol = coin.get('symbol', '').upper()
-            price = format_price(coin.get('current_price', 0))
+            price = format_price(coin.get('current_price'))
             change = format_change_percent(coin.get('price_change_percentage_24h'))
             
-            report += f"1. **{name} ({symbol}):** {price} {change}\n"
+            report += f"{idx}. <b>{name} ({symbol}):</b> {price} {change}\n"
             
-        report += f"\n---\n*تابعنا للمزيد من {CHANNEL_USERNAME}*"
+        report += f"\n---\n<i>*تابعنا للمزيد من {CHANNEL_USERNAME}*</i>"
         post_text_to_telegram(report)
         
     except Exception as e:
@@ -154,7 +167,7 @@ def run_losers_job():
 # --- [4] التشغيل الرئيسي (الذكي) ---
 def main():
     print("==========================================")
-    print(f"بدء تشغيل (v1.0 - بوت Market Byte)...")
+    print(f"بدء تشغيل (v1.1 - بوت Market Byte)...")
     
     # (توقيت بغداد: 8ص, 2ظ, 8م, 2ص)
     # (بتوقيت UTC: 5, 11, 17, 23)
