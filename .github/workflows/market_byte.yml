@@ -1,7 +1,4 @@
-### الملف
-# =============================================================================
-
-name: Market Byte Bot (v1.0)
+name: Market Byte Bot (v2.3)
 
 on:
   schedule:
@@ -17,10 +14,13 @@ jobs:
   run-daily-poster:
     runs-on: ubuntu-latest
     env:
-      # (المفاتيح السرية التي أضفتها للمستودع الجديد)
+      # (المفاتيح القديمة)
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       CHANNEL_USERNAME: ${{ secrets.CHANNEL_USERNAME }}
-      # (لا نحتاج مفتاح API للعملات لهذا الكود)
+      
+      # (!!! المفاتيح الجديدة المطلوبة هنا v2.3 !!!)
+      NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+      COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
       
     steps:
       - name: Checkout Repository
@@ -36,3 +36,4 @@ jobs:
         
       - name: Run Python Script
         run: python crypto_bot.py
+
