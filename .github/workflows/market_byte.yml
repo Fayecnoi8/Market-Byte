@@ -1,9 +1,7 @@
-name: Market Byte Bot (v5.0 - Combined Logic)
+name: Market Byte Bot (v6.0 - Demo Key Logic)
 
 on:
   schedule:
-    # (v5.0) الجدول الزمني المدمج:
-    
     # 1. للنشر اليومي (8 صباحاً بغداد)
     # (يعمل الساعة 5:00 UTC)
     - cron: '0 5 * * *'
@@ -19,12 +17,12 @@ jobs:
   run-smart-bot:
     runs-on: ubuntu-latest
     env:
-      # (v5.0) المفاتيح الثلاثة المطلوبة
+      # المفاتيح الثلاثة المطلوبة (بما في ذلك مفتاح Demo)
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       CHANNEL_USERNAME: ${{ secrets.CHANNEL_USERNAME }}
       COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
       
-      # (v5.0) هذا المتغير مهم ليعرف الكود إذا كان التشغيل "يدوياً"
+      # هذا المتغير مهم ليعرف الكود إذا كان التشغيل "يدوياً"
       GITHUB_EVENT_NAME: ${{ github.event_name }}
       
     steps:
