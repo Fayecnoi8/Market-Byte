@@ -53,6 +53,7 @@ except locale.Error:
 def post_photo_to_telegram(image_url, text_caption):
     """(آمن) إرسال صورة + نص (مع خدعة الرفع)"""
     print(f"... جاري إرسال (التقرير المصور) إلى {CHANNEL_USERNAME} ...")
+    response = None # لضمان توفر المتغير في حال حدوث خطأ مبكر
     try:
         print(f"   ... (1/2) جاري تحميل الصورة من: {image_url}")
         image_response = requests.get(image_url, timeout=30)
@@ -80,6 +81,7 @@ def post_text_to_telegram(text_content):
     """(آمن) إرسال نص فقط (للتنبيهات أو كخطة احتياطية)"""
     url = f"{TELEGRAM_API_URL}/sendMessage"
     payload = { 'chat_id': CHANNEL_USERNAME, 'text': text_content, 'parse_mode': 'HTML', 'disable_web_page_preview': True }
+    response = None # لضمان توفر المتغير
     try:
         response = requests.post(url, json=payload, timeout=60)
         response.raise_for_status()
@@ -127,6 +129,7 @@ def run_daily_top_15_job():
         # (لا نتوقف، نحاول إرسال العملات)
 
     # 2. جلب وإرسال أفضل 15 عملة
+    response = None # لضمان توفر المتغير
     try:
         url = f"{PRO_COINGECKO_API_URL}/coins/markets"
         params = {'vs_currency': 'usd', 'order': 'market_cap_desc', 'per_page': 15, 'page': 1, 'sparkline': 'false'}
@@ -171,6 +174,7 @@ def run_daily_top_15_job():
 # [المهمة 2: فحص التنبيهات كل 6 ساعات]
 def run_price_alert_job():
     print("--- بدء مهمة [2. فحص التنبيهات الدورية] ---")
+    response = None # لضمان توفر المتغير
     try:
         ids = ",".join(ALERT_WATCHLIST)
         url = f"{PRO_COINGECKO_API_URL}/simple/price"
